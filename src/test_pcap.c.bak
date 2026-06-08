@@ -1,0 +1,30 @@
+#include <stdio.h>
+#include <pcap.h>
+
+int main() {
+    char errbuf[PCAP_ERRBUF_SIZE];
+    pcap_if_t *alldevs, *dev;
+    
+    // 查找所有网络设备
+    if (pcap_findalldevs(&alldevs, errbuf) == -1) {
+        fprintf(stderr, "Error finding devices: %s\n", errbuf);
+        return 1;
+    }
+    
+    // 打印所有设备
+    int i = 0;
+    for (dev = alldevs; dev != NULL; dev = dev->next) {
+        printf("%d: %s", ++i, dev->name);
+        if (dev->description)
+            printf(" (%s)\n", dev->description);
+        else
+            printf(" (No description)\n");
+    }
+    
+    if (i == 0) {
+        printf("No interfaces found!\n");
+    }
+    
+    pcap_freealldevs(alldevs);
+    return 0;
+}

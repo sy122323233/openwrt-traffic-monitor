@@ -1,0 +1,193 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <pcap.h>
+#include <netinet/ip.h>
+#include <netinet/if_ether.h>
+#include <arpa/inet.h>
+#include <time.h>
+#include <pthread.h>
+
+#define MAX_IPS 256
+#define SNAP_LEN 1518
+#define TIMEOUT 1000
+#define HISTORY_SIZE 40  // 保存40个时间点的历史数据（每秒一个）
+
+// IP 流量统计结构
+typedef struct {
+    char ip[16];
+    unsigned long long rx_bytes;   // 接收字节数（目的IP是本机）
+    unsigned long long tx_bytes;   // 发送字节数（源IP是本机）
+    unsigned long long history_bytes[HISTORY_SIZE];  // 历史字节数（每秒记录）
+    int history_index;
+    time_t last_update;
+    unsigned long long peak_rate;   // 峰值速率 (bytes/s)
+} ip_stats_t;
+
+ip_stats_t ip_table[MAX_IPS];
+int ip_count = 0;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+volatile int running = 1;
+
+// 查找或添加 IP
+ip_stats_t* find_or_add_ip(const char* ip) {
+    pthread_mutex_lock(&mutex);
+    for (int i = 0; i < ip_count; i++) {
+        if (strcmp(ip_table[i].ip, ip) == 0) {
+            pthread_mutex_unlock(&mutex);
+            return &ip_table[i];
+        }
+    }
+    if (ip_count < MAX_IPS) {
+        strcpy(ip_table[ip_count].ip, ip);
+        ip_table[ip_count].rx_bytes = 0;
+        ip_table[ip_count].tx_bytes = 0;
+        ip_table[ip_count].peak_rate = 0;
+        ip_table[ip_count].history_index = 0;
+        memset(ip_table[ip_count].history_bytes, 0, sizeof(ip_table[ip_count].history_bytes));
+        ip_table[ip_count].last_update = time(NULL);
+        ip_count++;
+        pthread_mutex_unlock(&mutex);
+        return &ip_table[ip_count - 1];
+    }
+    pthread_mutex_unlock(&mutex);
+    return NULL;
+}
+
+// 更新速率（每秒调用一次）
+void update_rates() {
+    static time_t last_calc = 0;
+    time_t now = time(NULL);
+    
+    if (last_calc == 0) {
+        last_calc = now;
+        return;
+    }
+    
+    if (now - last_calc >= 1) {
+        pthread_mutex_lock(&mutex);
+        for (int i = 0; i < ip_count; i++) {
+            // 计算当前秒的速率
+            int idx = ip_table[i].history_index;
+            unsigned long long bytes_this_sec = ip_table[i].history_bytes[idx];
+            
+            // 更新峰值
+            if (bytes_this_sec > ip_table[i].peak_rate) {
+                ip_table[i].peak_rate = bytes_this_sec;
+            }
+            
+            // 移动到下一个历史位置
+            ip_table[i].history_index = (idx + 1) % HISTORY_SIZE;
+            ip_table[i].history_bytes[ip_table[i].history_index] = 0;
+        }
+        last_calc = now;
+        pthread_mutex_unlock(&mutex);
+    }
+}
+
+// 计算平均速率（最近 n 秒）
+unsigned long long get_avg_rate(ip_stats_t* stat, int seconds) {
+    if (seconds > HISTORY_SIZE) seconds = HISTORY_SIZE;
+    
+    unsigned long long total = 0;
+    int idx = stat->history_index;
+    for (int i = 0; i < seconds; i++) {
+        int pos = (idx - i + HISTORY_SIZE) % HISTORY_SIZE;
+        total += stat->history_bytes[pos];
+    }
+    return total / seconds;
+}
+
+// 数据包处理回调函数
+void packet_handler(u_char *args, const struct pcap_pkthdr *header, const u_char *packet) {
+    struct ether_header *eth_header;
+    struct ip *ip_header;
+    
+    eth_header = (struct ether_header *)packet;
+    
+    // 只处理 IP 包
+    if (ntohs(eth_header->ether_type) != ETHERTYPE_IP) {
+        return;
+    }
+    
+    ip_header = (struct ip *)(packet + sizeof(struct ether_header));
+    char src_ip[16], dst_ip[16];
+    
+    inet_ntop(AF_INET, &(ip_header->ip_src), src_ip, sizeof(src_ip));
+    inet_ntop(AF_INET, &(ip_header->ip_dst), dst_ip, sizeof(dst_ip));
+    
+    int packet_size = header->len;
+    
+    // 更新统计
+    ip_stats_t *src_stat = find_or_add_ip(src_ip);
+    ip_stats_t *dst_stat = find_or_add_ip(dst_ip);
+    
+    if (src_stat) {
+        src_stat->tx_bytes += packet_size;
+        // 记录到历史
+        int idx = src_stat->history_index;
+        src_stat->history_bytes[idx] += packet_size;
+    }
+    if (dst_stat) {
+        dst_stat->rx_bytes += packet_size;
+        int idx = dst_stat->history_index;
+        dst_stat->history_bytes[idx] += packet_size;
+    }
+    
+    update_rates();
+}
+
+// 打印统计信息（每秒打印一次）
+void* print_stats(void* arg) {
+    while (running) {
+        sleep(2);  // 每2秒打印一次
+        
+        pthread_mutex_lock(&mutex);
+        printf("\n========== Traffic Statistics ==========\n");
+        printf("%-16s %-12s %-12s %-12s %-12s %-12s\n", 
+               "IP", "RX_Bytes", "TX_Bytes", "Avg2s", "Avg10s", "Peak");
+        printf("--------------------------------------------------------\n");
+        
+        for (int i = 0; i < ip_count; i++) {
+            ip_stats_t *s = &ip_table[i];
+            unsigned long long avg2 = get_avg_rate(s, 2);
+            unsigned long long avg10 = get_avg_rate(s, 10);
+            
+ 
+           printf("%-16s %-12llu %-12llu %-12llu %-12llu %-12llu\n",
+                   s->ip, s->rx_bytes, s->tx_bytes, avg2, avg10, s->peak_rate);
+        }
+        printf("========================================\n");
+        pthread_mutex_unlock(&mutex);
+    }
+    return NULL;
+}
+
+int main(int argc, char *argv[]) {
+    char *dev = "br-lan";  // 监听 LAN 口
+    char errbuf[PCAP_ERRBUF_SIZE];
+    pcap_t *handle;
+    pthread_t print_thread;
+    
+    printf("Starting traffic monitor on %s...\n", dev);
+    
+    // 打开网络设备
+    handle = pcap_open_live(dev, SNAP_LEN, 1, TIMEOUT, errbuf);
+    if (handle == NULL) {
+        fprintf(stderr, "Couldn't open device %s: %s\n", dev, errbuf);
+        return 1;
+    }
+    
+    // 启动打印线程
+    pthread_create(&print_thread, NULL, print_stats, NULL);
+    
+    // 开始捕获数据包
+    printf("Capturing packets... Press Ctrl+C to stop.\n");
+    pcap_loop(handle, -1, packet_handler, NULL);
+    
+    running = 0;
+    pthread_join(print_thread, NULL);
+    
+    pcap_close(handle);
+    return 0;
+}

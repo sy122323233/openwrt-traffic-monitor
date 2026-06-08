@@ -1,0 +1,3 @@
+/home/speechless/traffic_monitor/build/CMakeFiles/traffic_monitor.dir
+/home/speechless/traffic_monitor/build/CMakeFiles/edit_cache.dir
+/home/speechless/traffic_monitor/build/CMakeFiles/rebuild_cache.dir
