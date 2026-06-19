@@ -5,7 +5,6 @@
 ##  目录
 
 - [功能特性](#功能特性)
-- [目录结构](#目录结构)
 - [运行环境](#运行环境)
 - [运行步骤](#运行步骤)
 
@@ -21,19 +20,6 @@
 -  Web 前端可视化
 -  支持交叉编译部署到 OpenWrt
 
-
-## 目录结构
-
-traffic_monitor/
-├── src/
-│ └── traffic_stats_http.c # 主程序（捕获+统计+HTTP服务）
-├── build/ # 编译输出目录
-│ └── traffic_monitor # 可执行文件
-├── index.html # 流量监控前端页面
-├── index_final.html # 整合页面（流量监控 + 防火墙）
-├── CMakeLists.txt # CMake 配置
-├── toolchain.cmake # 交叉编译配置
-└── README.md # 项目说明
 
 
 ## 运行环境
@@ -93,3 +79,5 @@ chmod +x /root/traffic_http
 
 ### 6. 浏览器访问整合页面
 http://<你的Ubuntu_IP>:8000/index_final.html
+
+
