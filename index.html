@@ -13,7 +13,7 @@
 </head>
 <body>
 
-<h2>📡 OpenWrt 流量监控（多 IP 折线图）</h2>
+<h2>📡 OpenWrt 流量监控</h2>
 
 <div class="chart-box" id="trendChart"></div>
 
@@ -38,7 +38,7 @@
     const MAX_POINTS = 40;   // 最多保存多少个时间点
     // ============================================
 
-    const API_URL = 'http://192.168.43.128:8080/stats';  // 改成你的实际后端地址
+    const API_URL = 'http://192.168.43.130:8080/stats';  // 改成你的实际后端地址
 
     let chart = null;
     // 存储每个 IP 的历史速率数据
