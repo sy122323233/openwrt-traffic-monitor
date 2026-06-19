@@ -75,6 +75,10 @@ chmod +x /root/traffic_http
 程序启动后运行命令行统计打印
 
 ### 5.在 Ubuntu 中
+将 index_final.html 放到 HTTP 服务器目录：
+```bash
+cp ~/traffic_monitor/index_final.html ~/traffic_monitor/build/
+```
 打开另一个终端，使Flask 后端保持在运行状态（默认监听 :5000）
 
 ### 6. 浏览器访问整合页面
