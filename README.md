@@ -7,12 +7,7 @@
 - [功能特性](#功能特性)
 - [目录结构](#目录结构)
 - [运行环境](#运行环境)
-- [快速开始](#快速开始)
-- [API 接口](#api-接口)
-- [前端页面](#前端页面)
-- [常见问题](#常见问题)
-- [实验要求完成情况](#实验要求完成情况)
-- [作者](#作者)
+- [运行步骤](#运行步骤)
 
 
 ## 功能特性
@@ -56,7 +51,7 @@ traffic_monitor/
 sudo apt update
 sudo apt install -y build-essential cmake zstd wget libpcap-dev
 ```
-## 快速开始
+## 运行步骤
 
 ### 1. 配置交叉编译环境
 ```bash
@@ -93,9 +88,8 @@ chmod +x /root/traffic_http
 ```
 程序启动后运行命令行统计打印
 
-### 5.访问 Web 界面
-将 index.html 放到 HTTP 服务器目录：
-```bash
-cp ../index.html ~/traffic_monitor/build/
-```
-浏览器访问http://<你的Ubuntu_IP>:8000/index.html
+### 5.在 Ubuntu 中
+打开另一个终端，使Flask 后端保持在运行状态（默认监听 :5000）
+
+### 6. 浏览器访问整合页面
+http://<你的Ubuntu_IP>:8000/index_final.html
